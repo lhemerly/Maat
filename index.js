@@ -130,7 +130,7 @@ const findCycles = (graph) => {
     visited.add(node);
     stack.push(node);
 
-    graph[node].forEach((neighbor) => {
+    Object.keys(graph[node]).forEach((neighbor) => {
       if (!visited.has(neighbor)) {
         dfs(neighbor);
       } else if (stack.includes(neighbor)) {
