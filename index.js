@@ -182,14 +182,24 @@ function findCyclesRecursive(currentToken, visited, cycle, cycles) {
 function calculateArbitrageProfit(rates) {
   let profit = 0;
 
+  // Pre-compute a Map of rates for O(1) lookup
+  const ratesMap = new Map();
+  for (let i = 0; i < rates.length; i++) {
+    const [buyCurrency, sellCurrency, rate] = rates[i];
+    ratesMap.set(`${buyCurrency}:${sellCurrency}`, rate);
+  }
+
   // Loop through each currency pair to check for arbitrage opportunities
   for (let i = 0; i < rates.length; i++) {
     const [buyCurrency, sellCurrency, buyRate] = rates[i];
 
     // Find the corresponding sell rate for the buy currency
-    const sellRate = rates.find(
-      (rate) => rate[0] === sellCurrency && rate[1] === buyCurrency,
-    )[2];
+    const sellRate = ratesMap.get(`${sellCurrency}:${buyCurrency}`);
+    if (sellRate == null) {
+      throw new Error(
+        `Missing reverse rate for pair ${sellCurrency}:${buyCurrency}`,
+      );
+    }
 
     // Calculate the potential profit for this cycle
     const potentialProfit = sellRate / buyRate - 1;
