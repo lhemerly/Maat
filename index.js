@@ -3,60 +3,106 @@ const BigNumber = require("bignumber.js");
 const { ethers } = require("ethers");
 const chalk = require("chalk");
 
-// Load pairs from JSON file
-const pairs = JSON.parse(fs.readFileSync("pairs.json"));
+// ERC20 ABI for decimals
+const erc20ABI = [
+  {
+    constant: true,
+    inputs: [],
+    name: "decimals",
+    outputs: [{ name: "", type: "uint8" }],
+    type: "function",
+  },
+];
 
-// Load ABI from JSON file
-const dexFactoryABI = JSON.parse(fs.readFileSync("dexFactory.json"));
-const dexRouterABI = JSON.parse(fs.readFileSync("dexRouter.json"));
-
-// Load provider data from JSON file
-const config = JSON.parse(fs.readFileSync("config.json"));
-
-// Set up provider and signer
-const provider = new ethers.providers.JsonRpcProvider(config.rpcUrl);
-const wallet = new ethers.Wallet(config.privateKey, provider);
-
-// Set up contract instances
-const uniswapFactory = new ethers.Contract(
-  config.uniswapFactoryAddress,
-  dexFactoryABI,
-  wallet
-);
-const uniswapRouter = new ethers.Contract(
-  config.uniswapRouterAddress,
-  dexRouterABI,
-  wallet
-);
-
-// Create graph of token pairs and prices
-const graph = {};
-for (let [tokenA, tokenB] of pairs) {
-  const [tokenAPrice, tokenBPrice] = await getTokenPrices(tokenA, tokenB);
-  const tokenAPriceBN = new BigNumber(tokenAPrice);
-  const tokenBPriceBN = new BigNumber(tokenBPrice);
-
-  if (!graph[tokenA]) {
-    graph[tokenA] = {};
+async function main() {
+  // Load pairs from JSON file
+  let pairs = [];
+  try {
+    pairs = JSON.parse(fs.readFileSync("pairs.json"));
+  } catch (e) {
+    console.error("Error loading pairs.json:", e.message);
   }
-  graph[tokenA][tokenB] = tokenBPriceBN.div(tokenAPriceBN);
 
-  if (!graph[tokenB]) {
-    graph[tokenB] = {};
+  // Load ABI from JSON file
+  let dexFactoryABI = [];
+  let dexRouterABI = [];
+  try {
+    dexFactoryABI = JSON.parse(fs.readFileSync("ABIs/dexFactory.json"));
+    dexRouterABI = JSON.parse(fs.readFileSync("ABIs/dexRouter.json"));
+  } catch (e) {
+    console.error("Error loading ABIs:", e.message);
   }
-  graph[tokenB][tokenA] = tokenAPriceBN.div(tokenBPriceBN);
+
+  // Load provider data from JSON file
+  let config = {};
+  try {
+    config = JSON.parse(fs.readFileSync("config.json"));
+  } catch (e) {
+    console.error("Error loading config.json:", e.message);
+  }
+
+  if (!config.rpcUrl || !config.privateKey) {
+    console.error("Missing configuration. Please check config.json.");
+    return;
+  }
+
+  // Set up provider and signer
+  const provider = new ethers.providers.JsonRpcProvider(config.rpcUrl);
+  const wallet = new ethers.Wallet(config.privateKey, provider);
+
+  // Set up contract instances
+  const uniswapFactory = new ethers.Contract(
+    config.uniswapFactoryAddress,
+    dexFactoryABI,
+    wallet
+  );
+  const uniswapRouter = new ethers.Contract(
+    config.uniswapRouterAddress,
+    dexRouterABI,
+    wallet
+  );
+
+  // Create graph of token pairs and prices
+  const graph = {};
+  for (let [tokenA, tokenB] of pairs) {
+    const [tokenAPrice, tokenBPrice] = await getTokenPrices(
+      tokenA,
+      tokenB,
+      uniswapFactory,
+      config,
+      provider
+    );
+    const tokenAPriceBN = new BigNumber(tokenAPrice);
+    const tokenBPriceBN = new BigNumber(tokenBPrice);
+
+    if (!graph[tokenA]) {
+      graph[tokenA] = {};
+    }
+    graph[tokenA][tokenB] = tokenBPriceBN.div(tokenAPriceBN);
+
+    if (!graph[tokenB]) {
+      graph[tokenB] = {};
+    }
+    graph[tokenB][tokenA] = tokenAPriceBN.div(tokenBPriceBN);
+  }
+
+  // Find cycles in the graph and calculate profit for each cycle
+  const foundCycles = findCycles(graph);
+  for (let cycle of foundCycles) {
+    const profit = calculateArbitrageProfit(cycle);
+    if (profit > 0) {
+      console.log("Arbitrage opportunity found:", cycle, "Profit:", profit);
+    }
+  }
 }
 
-// Find cycles in the graph and calculate profit for each cycle
-const cycles = findCycles(graph);
-for (let cycle of cycles) {
-  const profit = calculateArbitrageProfit(cycle);
-  if (profit > 0) {
-    console.log("Arbitrage opportunity found:", cycle, "Profit:", profit);
-  }
-}
-
-async function getTokenPrices(tokenA, tokenB) {
+async function getTokenPrices(
+  tokenA,
+  tokenB,
+  uniswapFactory,
+  config,
+  provider
+) {
   console.log(
     `Getting prices for ${chalk.yellow(tokenA)} and ${chalk.yellow(tokenB)}...`
   );
@@ -130,16 +176,18 @@ const findCycles = (graph) => {
     visited.add(node);
     stack.push(node);
 
-    graph[node].forEach((neighbor) => {
-      if (!visited.has(neighbor)) {
-        dfs(neighbor);
-      } else if (stack.includes(neighbor)) {
-        const cycle = [...stack.slice(stack.indexOf(neighbor)), neighbor].join(
-          " -> "
-        );
-        cycles.add(cycle);
-      }
-    });
+    if (graph[node]) {
+      Object.keys(graph[node]).forEach((neighbor) => {
+        if (!visited.has(neighbor)) {
+          dfs(neighbor);
+        } else if (stack.includes(neighbor)) {
+          const cycle = [...stack.slice(stack.indexOf(neighbor)), neighbor].join(
+            " -> "
+          );
+          cycles.add(cycle);
+        }
+      });
+    }
 
     stack.pop();
   };
@@ -156,19 +204,19 @@ const findCycles = (graph) => {
   return cycles;
 };
 
-function findCyclesRecursive(currentToken, visited, cycle, cycles) {
+function findCyclesRecursive(graph, currentToken, visited, cycle, cycles) {
   visited[currentToken] = true;
   cycle.push(currentToken);
 
-  for (const neighbor of tokenGraph[currentToken].neighbors) {
+  const neighbors = graph[currentToken] ? Object.keys(graph[currentToken]) : [];
+
+  for (const neighbor of neighbors) {
     if (!visited[neighbor]) {
-      findCyclesRecursive(neighbor, visited, cycle, cycles);
+      findCyclesRecursive(graph, neighbor, visited, cycle, cycles);
     } else {
       const cycleIndex = cycle.indexOf(neighbor);
       if (cycleIndex > -1) {
-        cycle.push(neighbor);
-        const cycleLength = cycle.length - cycleIndex;
-        const formattedCycle = cycle.slice(cycleIndex);
+        const formattedCycle = [...cycle.slice(cycleIndex), neighbor];
         console.log(chalk.green(`Found cycle: ${formattedCycle.join(" -> ")}`));
         cycles.push(formattedCycle);
       }
@@ -178,8 +226,6 @@ function findCyclesRecursive(currentToken, visited, cycle, cycles) {
   cycle.pop();
   visited[currentToken] = false;
 }
-
-const chalk = require("chalk");
 
 function calculateArbitrageProfit(rates) {
   let profit = 0;
@@ -217,3 +263,16 @@ function calculateArbitrageProfit(rates) {
     ? chalk.green(`Total profit: ${(profit * 100).toFixed(2)}%`)
     : chalk.red("No arbitrage opportunities found");
 }
+
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  findCycles,
+  findCyclesRecursive,
+  calculateArbitrageProfit,
+};
