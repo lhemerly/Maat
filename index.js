@@ -197,6 +197,11 @@ function calculateArbitrageProfit(rates) {
 
     // Find the corresponding sell rate for the buy currency
     const sellRate = ratesMap.get(`${sellCurrency}:${buyCurrency}`);
+    if (sellRate == null) {
+      throw new Error(
+        `Missing reverse rate for pair ${sellCurrency}:${buyCurrency}`,
+      );
+    }
 
     // Calculate the potential profit for this cycle
     const potentialProfit = sellRate / buyRate - 1;
