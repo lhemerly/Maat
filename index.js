@@ -21,44 +21,51 @@ const wallet = new ethers.Wallet(config.privateKey, provider);
 const uniswapFactory = new ethers.Contract(
   config.uniswapFactoryAddress,
   dexFactoryABI,
-  wallet,
+  wallet
 );
 const uniswapRouter = new ethers.Contract(
   config.uniswapRouterAddress,
   dexRouterABI,
-  wallet,
+  wallet
 );
 
-// Create graph of token pairs and prices
-const graph = {};
-for (let [tokenA, tokenB] of pairs) {
-  const [tokenAPrice, tokenBPrice] = await getTokenPrices(tokenA, tokenB);
-  const tokenAPriceBN = new BigNumber(tokenAPrice);
-  const tokenBPriceBN = new BigNumber(tokenBPrice);
+// Cache for token decimals
+const decimalCache = {};
 
-  if (!graph[tokenA]) {
-    graph[tokenA] = {};
-  }
-  graph[tokenA][tokenB] = tokenBPriceBN.div(tokenAPriceBN);
+async function main() {
+  // Create graph of token pairs and prices
+  const graph = {};
+  for (let [tokenA, tokenB] of pairs) {
+    const [tokenAPrice, tokenBPrice] = await getTokenPrices(tokenA, tokenB);
+    const tokenAPriceBN = new BigNumber(tokenAPrice);
+    const tokenBPriceBN = new BigNumber(tokenBPrice);
 
-  if (!graph[tokenB]) {
-    graph[tokenB] = {};
+    if (!graph[tokenA]) {
+      graph[tokenA] = {};
+    }
+    graph[tokenA][tokenB] = tokenBPriceBN.div(tokenAPriceBN);
+
+    if (!graph[tokenB]) {
+      graph[tokenB] = {};
+    }
+    graph[tokenB][tokenA] = tokenAPriceBN.div(tokenBPriceBN);
   }
-  graph[tokenB][tokenA] = tokenAPriceBN.div(tokenBPriceBN);
+
+  // Find cycles in the graph and calculate profit for each cycle
+  const cycles = findCycles(graph);
+  for (let cycle of cycles) {
+    const profit = calculateArbitrageProfit(cycle);
+    if (profit > 0) {
+      console.log("Arbitrage opportunity found:", cycle, "Profit:", profit);
+    }
+  }
 }
 
-// Find cycles in the graph and calculate profit for each cycle
-const cycles = findCycles(graph);
-for (let cycle of cycles) {
-  const profit = calculateArbitrageProfit(cycle);
-  if (profit > 0) {
-    console.log("Arbitrage opportunity found:", cycle, "Profit:", profit);
-  }
-}
+main().catch(console.error);
 
 async function getTokenPrices(tokenA, tokenB) {
   console.log(
-    `Getting prices for ${chalk.yellow(tokenA)} and ${chalk.yellow(tokenB)}...`,
+    `Getting prices for ${chalk.yellow(tokenA)} and ${chalk.yellow(tokenB)}...`
   );
 
   const pairAddress = await uniswapFactory.getPair(tokenA, tokenB);
@@ -67,37 +74,44 @@ async function getTokenPrices(tokenA, tokenB) {
   const pairContract = new ethers.Contract(
     pairAddress,
     config.uniswapPairABI,
-    provider,
+    provider
   );
   const [tokenAReserves, tokenBReserves] = await pairContract.getReserves();
 
   console.log(
     `Token A (${chalk.yellow(tokenA)}) reserves: ${chalk.green(
-      ethers.utils.formatEther(tokenAReserves),
-    )}`,
+      ethers.utils.formatEther(tokenAReserves)
+    )}`
   );
   console.log(
     `Token B (${chalk.yellow(tokenB)}) reserves: ${chalk.green(
-      ethers.utils.formatEther(tokenBReserves),
-    )}`,
+      ethers.utils.formatEther(tokenBReserves)
+    )}`
   );
 
-  const tokenAContract = new ethers.Contract(tokenA, erc20ABI, provider);
-  const tokenBContract = new ethers.Contract(tokenB, erc20ABI, provider);
+  if (!decimalCache[tokenA]) {
+    const tokenAContract = new ethers.Contract(tokenA, erc20ABI, provider);
+    decimalCache[tokenA] = tokenAContract.decimals();
+  }
+  if (!decimalCache[tokenB]) {
+    const tokenBContract = new ethers.Contract(tokenB, erc20ABI, provider);
+    decimalCache[tokenB] = tokenBContract.decimals();
+  }
+
   const [tokenADecimals, tokenBDecimals] = await Promise.all([
-    tokenAContract.decimals(),
-    tokenBContract.decimals(),
+    decimalCache[tokenA],
+    decimalCache[tokenB],
   ]);
 
   console.log(
     `Token A (${chalk.yellow(tokenA)}) decimals: ${chalk.blue(
-      tokenADecimals.toString(),
-    )}`,
+      tokenADecimals.toString()
+    )}`
   );
   console.log(
     `Token B (${chalk.yellow(tokenB)}) decimals: ${chalk.blue(
-      tokenBDecimals.toString(),
-    )}`,
+      tokenBDecimals.toString()
+    )}`
   );
 
   const tokenAPrice = tokenBReserves
@@ -109,13 +123,13 @@ async function getTokenPrices(tokenA, tokenB) {
 
   console.log(
     `Token A (${chalk.yellow(tokenA)}) price: ${chalk.green(
-      ethers.utils.formatUnits(tokenAPrice, tokenADecimals),
-    )}`,
+      ethers.utils.formatUnits(tokenAPrice, tokenADecimals)
+    )}`
   );
   console.log(
     `Token B (${chalk.yellow(tokenB)}) price: ${chalk.green(
-      ethers.utils.formatUnits(tokenBPrice, tokenBDecimals),
-    )}`,
+      ethers.utils.formatUnits(tokenBPrice, tokenBDecimals)
+    )}`
   );
 
   return [tokenAPrice.toString(), tokenBPrice.toString()];
@@ -135,7 +149,7 @@ const findCycles = (graph) => {
         dfs(neighbor);
       } else if (stack.includes(neighbor)) {
         const cycle = [...stack.slice(stack.indexOf(neighbor)), neighbor].join(
-          " -> ",
+          " -> "
         );
         cycles.add(cycle);
       }
@@ -197,7 +211,7 @@ function calculateArbitrageProfit(rates) {
     const sellRate = ratesMap.get(`${sellCurrency}:${buyCurrency}`);
     if (sellRate == null) {
       throw new Error(
-        `Missing reverse rate for pair ${sellCurrency}:${buyCurrency}`,
+        `Missing reverse rate for pair ${sellCurrency}:${buyCurrency}`
       );
     }
 
@@ -210,10 +224,10 @@ function calculateArbitrageProfit(rates) {
       const formattedSellRate = chalk.green(sellRate.toFixed(4));
       const formattedProfit = chalk.green((potentialProfit * 100).toFixed(2));
       console.log(
-        chalk.yellow(`Buy ${buyCurrency} at rate ${formattedBuyRate}`),
+        chalk.yellow(`Buy ${buyCurrency} at rate ${formattedBuyRate}`)
       );
       console.log(
-        chalk.yellow(`Sell ${sellCurrency} at rate ${formattedSellRate}`),
+        chalk.yellow(`Sell ${sellCurrency} at rate ${formattedSellRate}`)
       );
       console.log(chalk.green(`Profit: ${formattedProfit}%`));
       profit += potentialProfit;
