@@ -14,6 +14,32 @@ const erc20ABI = [
   },
 ];
 
+function isStructuredCycle(cycle) {
+  return (
+    Array.isArray(cycle) &&
+    cycle.every(
+      (edge) =>
+        Array.isArray(edge) &&
+        edge.length >= 3 &&
+        typeof edge[0] === "string" &&
+        typeof edge[1] === "string"
+    )
+  );
+}
+
+// calculateArbitrageProfit returns a number (profit sum) or a chalk-formatted
+// string when no opportunity is found; normalize to a numeric value for comparison.
+function toNumericProfit(profit) {
+  if (typeof profit === "number") {
+    return profit;
+  }
+  if (typeof profit === "string") {
+    const parsed = Number(profit);
+    return Number.isFinite(parsed) ? parsed : NaN;
+  }
+  return NaN;
+}
+
 async function main() {
   // Load pairs from JSON file
   let pairs = [];
@@ -31,6 +57,7 @@ async function main() {
     dexRouterABI = JSON.parse(fs.readFileSync("ABIs/dexRouter.json"));
   } catch (e) {
     console.error("Error loading ABIs:", e.message);
+    return;
   }
 
   // Load provider data from JSON file
@@ -54,11 +81,6 @@ async function main() {
   const uniswapFactory = new ethers.Contract(
     config.uniswapFactoryAddress,
     dexFactoryABI,
-    wallet
-  );
-  const uniswapRouter = new ethers.Contract(
-    config.uniswapRouterAddress,
-    dexRouterABI,
     wallet
   );
 
@@ -89,8 +111,16 @@ async function main() {
   // Find cycles in the graph and calculate profit for each cycle
   const foundCycles = findCycles(graph);
   for (let cycle of foundCycles) {
+    if (!isStructuredCycle(cycle)) {
+      console.warn(
+        "Skipping profit calculation for unstructured cycle:",
+        cycle
+      );
+      continue;
+    }
     const profit = calculateArbitrageProfit(cycle);
-    if (profit > 0) {
+    const numericProfit = toNumericProfit(profit);
+    if (Number.isFinite(numericProfit) && numericProfit > 0) {
       console.log("Arbitrage opportunity found:", cycle, "Profit:", profit);
     }
   }

@@ -1,25 +1,40 @@
 const test = require("node:test");
 const assert = require("node:assert");
+const { after } = require("node:test");
 
 // Mocking required modules that are missing in the environment
 const Module = require("module");
 const originalRequire = Module.prototype.require;
 
 Module.prototype.require = function (path) {
-  if (["bignumber.js", "ethers", "chalk"].includes(path)) {
+  if (path === "ethers") {
     return {
-      providers: { JsonRpcProvider: class {} },
-      Wallet: class {},
-      Contract: class {},
-      utils: { formatEther: () => "0", formatUnits: () => "0" },
+      ethers: {
+        providers: { JsonRpcProvider: class {} },
+        Wallet: class {},
+        Contract: class {},
+        utils: { formatEther: () => "0", formatUnits: () => "0" },
+      },
+    };
+  }
+  if (path === "chalk") {
+    return {
       yellow: (s) => s,
       blue: (s) => s,
       green: (s) => s,
       red: (s) => s,
     };
   }
+  if (path === "bignumber.js") {
+    return class BigNumber {};
+  }
   return originalRequire.apply(this, arguments);
 };
+
+// Restore the original require after all tests complete
+after(() => {
+  Module.prototype.require = originalRequire;
+});
 
 const { findCyclesRecursive } = require("../index.js");
 
