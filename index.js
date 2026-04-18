@@ -125,15 +125,18 @@ const findCycles = (graph) => {
   const visited = new Set();
   const cycles = new Set();
   const stack = [];
+  // Set for O(1) path checks to improve cycle detection performance
+  const inStack = new Set();
 
   const dfs = (node) => {
     visited.add(node);
     stack.push(node);
+    inStack.add(node);
 
     Object.keys(graph[node]).forEach((neighbor) => {
       if (!visited.has(neighbor)) {
         dfs(neighbor);
-      } else if (stack.includes(neighbor)) {
+      } else if (inStack.has(neighbor)) {
         const cycle = [...stack.slice(stack.indexOf(neighbor)), neighbor].join(
           " -> ",
         );
@@ -141,6 +144,7 @@ const findCycles = (graph) => {
       }
     });
 
+    inStack.delete(node);
     stack.pop();
   };
 
