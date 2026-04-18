@@ -40,6 +40,9 @@ function toNumericProfit(profit) {
   return NaN;
 }
 
+// Cache for token decimals
+const decimalCache = {};
+
 async function main() {
   // Load pairs from JSON file
   let pairs = [];
@@ -158,11 +161,18 @@ async function getTokenPrices(
     )}`
   );
 
-  const tokenAContract = new ethers.Contract(tokenA, erc20ABI, provider);
-  const tokenBContract = new ethers.Contract(tokenB, erc20ABI, provider);
+  if (!decimalCache[tokenA]) {
+    const tokenAContract = new ethers.Contract(tokenA, erc20ABI, provider);
+    decimalCache[tokenA] = tokenAContract.decimals();
+  }
+  if (!decimalCache[tokenB]) {
+    const tokenBContract = new ethers.Contract(tokenB, erc20ABI, provider);
+    decimalCache[tokenB] = tokenBContract.decimals();
+  }
+
   const [tokenADecimals, tokenBDecimals] = await Promise.all([
-    tokenAContract.decimals(),
-    tokenBContract.decimals(),
+    decimalCache[tokenA],
+    decimalCache[tokenB],
   ]);
 
   console.log(
@@ -260,14 +270,24 @@ function findCyclesRecursive(graph, currentToken, visited, cycle, cycles) {
 function calculateArbitrageProfit(rates) {
   let profit = 0;
 
+  // Pre-compute a Map of rates for O(1) lookup
+  const ratesMap = new Map();
+  for (let i = 0; i < rates.length; i++) {
+    const [buyCurrency, sellCurrency, rate] = rates[i];
+    ratesMap.set(`${buyCurrency}:${sellCurrency}`, rate);
+  }
+
   // Loop through each currency pair to check for arbitrage opportunities
   for (let i = 0; i < rates.length; i++) {
     const [buyCurrency, sellCurrency, buyRate] = rates[i];
 
     // Find the corresponding sell rate for the buy currency
-    const sellRate = rates.find(
-      (rate) => rate[0] === sellCurrency && rate[1] === buyCurrency
-    )[2];
+    const sellRate = ratesMap.get(`${sellCurrency}:${buyCurrency}`);
+    if (sellRate == null) {
+      throw new Error(
+        `Missing reverse rate for pair ${sellCurrency}:${buyCurrency}`
+      );
+    }
 
     // Calculate the potential profit for this cycle
     const potentialProfit = sellRate / buyRate - 1;
