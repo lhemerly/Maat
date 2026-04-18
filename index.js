@@ -14,35 +14,6 @@ const erc20ABI = [
   },
 ];
 
-function isStructuredCycle(cycle) {
-  return (
-    Array.isArray(cycle) &&
-    cycle.every(
-      (edge) =>
-        Array.isArray(edge) &&
-        edge.length >= 3 &&
-        typeof edge[0] === "string" &&
-        typeof edge[1] === "string"
-    )
-  );
-}
-
-// calculateArbitrageProfit returns a number (profit sum) or a chalk-formatted
-// string when no opportunity is found; normalize to a numeric value for comparison.
-function toNumericProfit(profit) {
-  if (typeof profit === "number") {
-    return profit;
-  }
-  if (typeof profit === "string") {
-    const parsed = Number(profit);
-    return Number.isFinite(parsed) ? parsed : NaN;
-  }
-  return NaN;
-}
-
-// Cache for token decimals
-const decimalCache = {};
-
 async function main() {
   // Load pairs from JSON file
   let pairs = [];
@@ -60,7 +31,6 @@ async function main() {
     dexRouterABI = JSON.parse(fs.readFileSync("ABIs/dexRouter.json"));
   } catch (e) {
     console.error("Error loading ABIs:", e.message);
-    return;
   }
 
   // Load provider data from JSON file
@@ -84,6 +54,11 @@ async function main() {
   const uniswapFactory = new ethers.Contract(
     config.uniswapFactoryAddress,
     dexFactoryABI,
+    wallet
+  );
+  const uniswapRouter = new ethers.Contract(
+    config.uniswapRouterAddress,
+    dexRouterABI,
     wallet
   );
 
@@ -114,17 +89,16 @@ async function main() {
   // Find cycles in the graph and calculate profit for each cycle
   const foundCycles = findCycles(graph);
   for (let cycle of foundCycles) {
-    if (!isStructuredCycle(cycle)) {
-      console.warn(
-        "Skipping profit calculation for unstructured cycle:",
-        cycle
+    const profit = calculateArbitrageProfit(cycle, graph);
+    if (profit.gt(0)) {
+      const formattedProfit = chalk.green(profit.times(100).toFixed(4));
+      console.log(
+        chalk.green(
+          `Arbitrage opportunity found: ${cycle.join(
+            " -> "
+          )} | Profit: ${formattedProfit}%`
+        )
       );
-      continue;
-    }
-    const profit = calculateArbitrageProfit(cycle);
-    const numericProfit = toNumericProfit(profit);
-    if (Number.isFinite(numericProfit) && numericProfit > 0) {
-      console.log("Arbitrage opportunity found:", cycle, "Profit:", profit);
     }
   }
 }
@@ -161,18 +135,11 @@ async function getTokenPrices(
     )}`
   );
 
-  if (!decimalCache[tokenA]) {
-    const tokenAContract = new ethers.Contract(tokenA, erc20ABI, provider);
-    decimalCache[tokenA] = tokenAContract.decimals();
-  }
-  if (!decimalCache[tokenB]) {
-    const tokenBContract = new ethers.Contract(tokenB, erc20ABI, provider);
-    decimalCache[tokenB] = tokenBContract.decimals();
-  }
-
+  const tokenAContract = new ethers.Contract(tokenA, erc20ABI, provider);
+  const tokenBContract = new ethers.Contract(tokenB, erc20ABI, provider);
   const [tokenADecimals, tokenBDecimals] = await Promise.all([
-    decimalCache[tokenA],
-    decimalCache[tokenB],
+    tokenAContract.decimals(),
+    tokenBContract.decimals(),
   ]);
 
   console.log(
@@ -207,41 +174,43 @@ async function getTokenPrices(
   return [tokenAPrice.toString(), tokenBPrice.toString()];
 }
 
+function normalizeCycle(cycle) {
+  const nodes = cycle.slice(0, -1);
+  let minNodes = nodes;
+  let minStr = nodes.join(",");
+
+  for (let i = 1; i < nodes.length; i++) {
+    const rotated = [...nodes.slice(i), ...nodes.slice(0, i)];
+    const rotatedStr = rotated.join(",");
+    if (rotatedStr < minStr) {
+      minStr = rotatedStr;
+      minNodes = rotated;
+    }
+  }
+  return [...minNodes, minNodes[0]];
+}
+
 const findCycles = (graph) => {
-  const visited = new Set();
-  const cycles = new Set();
-  const stack = [];
-
-  const dfs = (node) => {
-    visited.add(node);
-    stack.push(node);
-
-    if (graph[node]) {
-      Object.keys(graph[node]).forEach((neighbor) => {
-        if (!visited.has(neighbor)) {
-          dfs(neighbor);
-        } else if (stack.includes(neighbor)) {
-          const cycle = [...stack.slice(stack.indexOf(neighbor)), neighbor].join(
-            " -> "
-          );
-          cycles.add(cycle);
-        }
-      });
-    }
-
-    stack.pop();
-  };
-
+  const allCycles = [];
   Object.keys(graph).forEach((node) => {
-    if (!visited.has(node)) {
-      dfs(node);
-    }
+    findCyclesRecursive(graph, node, {}, [], allCycles);
   });
 
-  console.log(chalk.blue("All cycles found:"));
-  cycles.forEach((cycle) => console.log(chalk.green(cycle)));
+  const uniqueCycles = [];
+  const seen = new Set();
+  for (const cycle of allCycles) {
+    const normalized = normalizeCycle(cycle);
+    const key = normalized.join(",");
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueCycles.push(cycle);
+    }
+  }
 
-  return cycles;
+  console.log(chalk.blue("All cycles found:"));
+  uniqueCycles.forEach((cycle) => console.log(chalk.green(cycle.join(" -> "))));
+
+  return uniqueCycles;
 };
 
 function findCyclesRecursive(graph, currentToken, visited, cycle, cycles) {
@@ -256,9 +225,8 @@ function findCyclesRecursive(graph, currentToken, visited, cycle, cycles) {
     } else {
       const cycleIndex = cycle.indexOf(neighbor);
       if (cycleIndex > -1) {
-        const formattedCycle = [...cycle.slice(cycleIndex), neighbor];
-        console.log(chalk.green(`Found cycle: ${formattedCycle.join(" -> ")}`));
-        cycles.push(formattedCycle);
+        const foundCycle = [...cycle.slice(cycleIndex), neighbor];
+        cycles.push(foundCycle);
       }
     }
   }
@@ -267,51 +235,22 @@ function findCyclesRecursive(graph, currentToken, visited, cycle, cycles) {
   visited[currentToken] = false;
 }
 
-function calculateArbitrageProfit(rates) {
-  let profit = 0;
+function calculateArbitrageProfit(cycle, graph) {
+  let totalRate = new BigNumber(1);
 
-  // Pre-compute a Map of rates for O(1) lookup
-  const ratesMap = new Map();
-  for (let i = 0; i < rates.length; i++) {
-    const [buyCurrency, sellCurrency, rate] = rates[i];
-    ratesMap.set(`${buyCurrency}:${sellCurrency}`, rate);
-  }
-
-  // Loop through each currency pair to check for arbitrage opportunities
-  for (let i = 0; i < rates.length; i++) {
-    const [buyCurrency, sellCurrency, buyRate] = rates[i];
-
-    // Find the corresponding sell rate for the buy currency
-    const sellRate = ratesMap.get(`${sellCurrency}:${buyCurrency}`);
-    if (sellRate == null) {
-      throw new Error(
-        `Missing reverse rate for pair ${sellCurrency}:${buyCurrency}`
-      );
-    }
-
-    // Calculate the potential profit for this cycle
-    const potentialProfit = sellRate / buyRate - 1;
-
-    // If there is a profit opportunity, log the details and update the total profit
-    if (potentialProfit > 0) {
-      const formattedBuyRate = chalk.green(buyRate.toFixed(4));
-      const formattedSellRate = chalk.green(sellRate.toFixed(4));
-      const formattedProfit = chalk.green((potentialProfit * 100).toFixed(2));
-      console.log(
-        chalk.yellow(`Buy ${buyCurrency} at rate ${formattedBuyRate}`)
-      );
-      console.log(
-        chalk.yellow(`Sell ${sellCurrency} at rate ${formattedSellRate}`)
-      );
-      console.log(chalk.green(`Profit: ${formattedProfit}%`));
-      profit += potentialProfit;
+  for (let i = 0; i < cycle.length - 1; i++) {
+    const tokenA = cycle[i];
+    const tokenB = cycle[i + 1];
+    const rate = graph[tokenA][tokenB];
+    if (rate) {
+      totalRate = totalRate.times(rate);
+    } else {
+      return new BigNumber(0);
     }
   }
 
-  // Return the total profit rounded to 2 decimal places
-  return profit > 0
-    ? chalk.green(`Total profit: ${(profit * 100).toFixed(2)}%`)
-    : chalk.red("No arbitrage opportunities found");
+  const potentialProfit = totalRate.minus(1);
+  return potentialProfit;
 }
 
 if (require.main === module) {
