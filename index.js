@@ -22,7 +22,7 @@ function isStructuredCycle(cycle) {
         Array.isArray(edge) &&
         edge.length >= 3 &&
         typeof edge[0] === "string" &&
-        typeof edge[1] === "string"
+        typeof edge[1] === "string",
     )
   );
 }
@@ -84,19 +84,21 @@ async function main() {
   const uniswapFactory = new ethers.Contract(
     config.uniswapFactoryAddress,
     dexFactoryABI,
-    wallet
+    wallet,
   );
 
   // Create graph of token pairs and prices
   const graph = {};
-  for (let [tokenA, tokenB] of pairs) {
-    const [tokenAPrice, tokenBPrice] = await getTokenPrices(
-      tokenA,
-      tokenB,
-      uniswapFactory,
-      config,
-      provider
-    );
+  const pricePromises = pairs.map(([tokenA, tokenB]) =>
+    getTokenPrices(tokenA, tokenB, uniswapFactory, config, provider).then(
+      (prices) => ({ tokenA, tokenB, prices }),
+    ),
+  );
+
+  const priceResults = await Promise.all(pricePromises);
+
+  for (const { tokenA, tokenB, prices } of priceResults) {
+    const [tokenAPrice, tokenBPrice] = prices;
     const tokenAPriceBN = new BigNumber(tokenAPrice);
     const tokenBPriceBN = new BigNumber(tokenBPrice);
 
@@ -117,7 +119,7 @@ async function main() {
     if (!isStructuredCycle(cycle)) {
       console.warn(
         "Skipping profit calculation for unstructured cycle:",
-        cycle
+        cycle,
       );
       continue;
     }
@@ -134,10 +136,10 @@ async function getTokenPrices(
   tokenB,
   uniswapFactory,
   config,
-  provider
+  provider,
 ) {
   console.log(
-    `Getting prices for ${chalk.yellow(tokenA)} and ${chalk.yellow(tokenB)}...`
+    `Getting prices for ${chalk.yellow(tokenA)} and ${chalk.yellow(tokenB)}...`,
   );
 
   const pairAddress = await uniswapFactory.getPair(tokenA, tokenB);
@@ -146,19 +148,19 @@ async function getTokenPrices(
   const pairContract = new ethers.Contract(
     pairAddress,
     config.uniswapPairABI,
-    provider
+    provider,
   );
   const [tokenAReserves, tokenBReserves] = await pairContract.getReserves();
 
   console.log(
     `Token A (${chalk.yellow(tokenA)}) reserves: ${chalk.green(
-      ethers.utils.formatEther(tokenAReserves)
-    )}`
+      ethers.utils.formatEther(tokenAReserves),
+    )}`,
   );
   console.log(
     `Token B (${chalk.yellow(tokenB)}) reserves: ${chalk.green(
-      ethers.utils.formatEther(tokenBReserves)
-    )}`
+      ethers.utils.formatEther(tokenBReserves),
+    )}`,
   );
 
   if (!decimalCache[tokenA]) {
@@ -177,13 +179,13 @@ async function getTokenPrices(
 
   console.log(
     `Token A (${chalk.yellow(tokenA)}) decimals: ${chalk.blue(
-      tokenADecimals.toString()
-    )}`
+      tokenADecimals.toString(),
+    )}`,
   );
   console.log(
     `Token B (${chalk.yellow(tokenB)}) decimals: ${chalk.blue(
-      tokenBDecimals.toString()
-    )}`
+      tokenBDecimals.toString(),
+    )}`,
   );
 
   const tokenAPrice = tokenBReserves
@@ -195,13 +197,13 @@ async function getTokenPrices(
 
   console.log(
     `Token A (${chalk.yellow(tokenA)}) price: ${chalk.green(
-      ethers.utils.formatUnits(tokenAPrice, tokenADecimals)
-    )}`
+      ethers.utils.formatUnits(tokenAPrice, tokenADecimals),
+    )}`,
   );
   console.log(
     `Token B (${chalk.yellow(tokenB)}) price: ${chalk.green(
-      ethers.utils.formatUnits(tokenBPrice, tokenBDecimals)
-    )}`
+      ethers.utils.formatUnits(tokenBPrice, tokenBDecimals),
+    )}`,
   );
 
   return [tokenAPrice.toString(), tokenBPrice.toString()];
@@ -221,9 +223,10 @@ const findCycles = (graph) => {
         if (!visited.has(neighbor)) {
           dfs(neighbor);
         } else if (stack.includes(neighbor)) {
-          const cycle = [...stack.slice(stack.indexOf(neighbor)), neighbor].join(
-            " -> "
-          );
+          const cycle = [
+            ...stack.slice(stack.indexOf(neighbor)),
+            neighbor,
+          ].join(" -> ");
           cycles.add(cycle);
         }
       });
@@ -285,7 +288,7 @@ function calculateArbitrageProfit(rates) {
     const sellRate = ratesMap.get(`${sellCurrency}:${buyCurrency}`);
     if (sellRate == null) {
       throw new Error(
-        `Missing reverse rate for pair ${sellCurrency}:${buyCurrency}`
+        `Missing reverse rate for pair ${sellCurrency}:${buyCurrency}`,
       );
     }
 
@@ -298,10 +301,10 @@ function calculateArbitrageProfit(rates) {
       const formattedSellRate = chalk.green(sellRate.toFixed(4));
       const formattedProfit = chalk.green((potentialProfit * 100).toFixed(2));
       console.log(
-        chalk.yellow(`Buy ${buyCurrency} at rate ${formattedBuyRate}`)
+        chalk.yellow(`Buy ${buyCurrency} at rate ${formattedBuyRate}`),
       );
       console.log(
-        chalk.yellow(`Sell ${sellCurrency} at rate ${formattedSellRate}`)
+        chalk.yellow(`Sell ${sellCurrency} at rate ${formattedSellRate}`),
       );
       console.log(chalk.green(`Profit: ${formattedProfit}%`));
       profit += potentialProfit;
