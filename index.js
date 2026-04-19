@@ -54,10 +54,8 @@ async function main() {
 
   // Load ABI from JSON file
   let dexFactoryABI = [];
-  let dexRouterABI = [];
   try {
     dexFactoryABI = JSON.parse(fs.readFileSync("ABIs/dexFactory.json"));
-    dexRouterABI = JSON.parse(fs.readFileSync("ABIs/dexRouter.json"));
   } catch (e) {
     console.error("Error loading ABIs:", e.message);
     return;
