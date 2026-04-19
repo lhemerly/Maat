@@ -77,13 +77,17 @@ async function main() {
   }
 
   if (typeof config.privateKey !== "string" || !/^(0x)?[0-9a-fA-F]{64}$/.test(config.privateKey)) {
-    console.error("Invalid configuration. privateKey must be a valid 64-character hex string.");
+    console.error("Invalid configuration. privateKey must be a valid 64-character hex string, with or without a 0x prefix.");
     return;
   }
 
+  const normalizedPrivateKey = config.privateKey.startsWith("0x")
+    ? config.privateKey
+    : `0x${config.privateKey}`;
+
   // Set up provider and signer
   const provider = new ethers.providers.JsonRpcProvider(config.rpcUrl);
-  const wallet = new ethers.Wallet(config.privateKey, provider);
+  const wallet = new ethers.Wallet(normalizedPrivateKey, provider);
 
   // Set up contract instances
   const uniswapFactory = new ethers.Contract(
