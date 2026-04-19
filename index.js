@@ -211,10 +211,13 @@ const findCycles = (graph) => {
   const visited = new Set();
   const cycles = new Set();
   const stack = [];
+  // Set for O(1) path checks to improve cycle detection performance
+  const inStack = new Set();
 
   const dfs = (node) => {
     visited.add(node);
     stack.push(node);
+    inStack.add(node);
 
     if (graph[node]) {
       Object.keys(graph[node]).forEach((neighbor) => {
@@ -229,6 +232,7 @@ const findCycles = (graph) => {
       });
     }
 
+    inStack.delete(node);
     stack.pop();
   };
 
