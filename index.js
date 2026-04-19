@@ -76,6 +76,11 @@ async function main() {
     return;
   }
 
+  if (typeof config.privateKey !== "string" || !/^(0x)?[0-9a-fA-F]{64}$/.test(config.privateKey)) {
+    console.error("Invalid configuration. privateKey must be a valid 64-character hex string.");
+    return;
+  }
+
   // Set up provider and signer
   const provider = new ethers.providers.JsonRpcProvider(config.rpcUrl);
   const wallet = new ethers.Wallet(config.privateKey, provider);
