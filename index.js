@@ -41,7 +41,7 @@ function toNumericProfit(profit) {
 }
 
 // Cache for token decimals
-const decimalCache = {};
+const decimalCache = Object.create(null);
 
 async function main() {
   // Load pairs from JSON file
@@ -88,7 +88,7 @@ async function main() {
   );
 
   // Create graph of token pairs and prices
-  const graph = {};
+  const graph = Object.create(null);
   for (let [tokenA, tokenB] of pairs) {
     const [tokenAPrice, tokenBPrice] = await getTokenPrices(
       tokenA,
@@ -101,12 +101,12 @@ async function main() {
     const tokenBPriceBN = new BigNumber(tokenBPrice);
 
     if (!graph[tokenA]) {
-      graph[tokenA] = {};
+      graph[tokenA] = Object.create(null);
     }
     graph[tokenA][tokenB] = tokenBPriceBN.div(tokenAPriceBN);
 
     if (!graph[tokenB]) {
-      graph[tokenB] = {};
+      graph[tokenB] = Object.create(null);
     }
     graph[tokenB][tokenA] = tokenAPriceBN.div(tokenBPriceBN);
   }
