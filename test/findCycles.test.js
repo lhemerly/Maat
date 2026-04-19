@@ -26,7 +26,10 @@ Module.prototype.require = function (path) {
     };
   }
   if (path === "bignumber.js") {
-    return class BigNumber {};
+    return class BigNumber {
+        constructor(val) { this.val = val; }
+        div(other) { return new BigNumber(this.val / other.val); }
+    };
   }
   return originalRequire.apply(this, arguments);
 };
@@ -36,21 +39,18 @@ after(() => {
   Module.prototype.require = originalRequire;
 });
 
-const { findCyclesRecursive } = require("../index.js");
+const { findCycles } = require("../index.js");
 
-test("findCyclesRecursive", async (t) => {
+test("findCycles", async (t) => {
   await t.test("should find a simple cycle A -> B -> A", () => {
     const graph = {
       A: { B: 1 },
       B: { A: 1 },
     };
-    const cycles = [];
-    findCyclesRecursive(graph, "A", {}, [], cycles);
+    const cycles = findCycles(graph);
 
-    // The implementation adds the neighbor to the end of the cycle array
-    // So A -> B -> A
-    assert.strictEqual(cycles.length, 1);
-    assert.deepStrictEqual(cycles[0], ["A", "B", "A"]);
+    assert.strictEqual(cycles.size, 1);
+    assert.ok(cycles.has("A -> B -> A") || cycles.has("B -> A -> B"));
   });
 
   await t.test("should find a 3-node cycle A -> B -> C -> A", () => {
@@ -59,11 +59,10 @@ test("findCyclesRecursive", async (t) => {
       B: { C: 1 },
       C: { A: 1 },
     };
-    const cycles = [];
-    findCyclesRecursive(graph, "A", {}, [], cycles);
+    const cycles = findCycles(graph);
 
-    assert.strictEqual(cycles.length, 1);
-    assert.deepStrictEqual(cycles[0], ["A", "B", "C", "A"]);
+    assert.strictEqual(cycles.size, 1);
+    assert.ok(cycles.has("A -> B -> C -> A") || cycles.has("B -> C -> A -> B") || cycles.has("C -> A -> B -> C"));
   });
 
   await t.test("should not find cycles in a DAG", () => {
@@ -72,10 +71,9 @@ test("findCyclesRecursive", async (t) => {
       B: { C: 1 },
       C: {},
     };
-    const cycles = [];
-    findCyclesRecursive(graph, "A", {}, [], cycles);
+    const cycles = findCycles(graph);
 
-    assert.strictEqual(cycles.length, 0);
+    assert.strictEqual(cycles.size, 0);
   });
 
   await t.test("should find multiple cycles", () => {
@@ -84,19 +82,11 @@ test("findCyclesRecursive", async (t) => {
       B: { A: 1 },
       C: { A: 1 },
     };
-    const cycles = [];
-    findCyclesRecursive(graph, "A", {}, [], cycles);
+    const cycles = findCycles(graph);
 
-    assert.strictEqual(cycles.length, 2);
-    // Order depends on Object.keys(graph["A"])
-    const expected = [
-      ["A", "B", "A"],
-      ["A", "C", "A"],
-    ];
-    // Check if both expected cycles are in the result
-    for (const exp of expected) {
-      assert.ok(cycles.some(c => JSON.stringify(c) === JSON.stringify(exp)), `Missing cycle ${exp}`);
-    }
+    assert.strictEqual(cycles.size, 2);
+    assert.ok(cycles.has("A -> B -> A") || cycles.has("B -> A -> B"));
+    assert.ok(cycles.has("A -> C -> A") || cycles.has("C -> A -> C"));
   });
 
   await t.test("should handle complex interconnected cycles", () => {
@@ -108,16 +98,10 @@ test("findCyclesRecursive", async (t) => {
       C: { A: 1 },
       D: { B: 1 },
     };
-    const cycles = [];
-    findCyclesRecursive(graph, "A", {}, [], cycles);
+    const cycles = findCycles(graph);
 
-    assert.strictEqual(cycles.length, 2);
-    const expected = [
-      ["A", "B", "C", "A"],
-      ["B", "D", "B"]
-    ];
-    for (const exp of expected) {
-      assert.ok(cycles.some(c => JSON.stringify(c) === JSON.stringify(exp)), `Missing cycle ${exp}`);
-    }
+    assert.strictEqual(cycles.size, 2);
+    assert.ok(cycles.has("A -> B -> C -> A") || cycles.has("B -> C -> A -> B") || cycles.has("C -> A -> B -> C"));
+    assert.ok(cycles.has("B -> D -> B") || cycles.has("D -> B -> D"));
   });
 });
