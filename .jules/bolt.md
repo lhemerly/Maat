@@ -21,9 +21,9 @@ Improvement: ~98.8% reduction in latency for this operation.
 **Date**: 2026-04-19
 **Location**: `index.js`, `main` function (graph construction loop)
 
-**What**: Replaced sequential async calls for `getTokenPrices` with parallel execution using `Promise.all()`.
+**What**: Replaced sequential async calls for `getTokenPrices` with parallel execution using `Promise.all()`, adding individual error handling for each request.
 
-**Why**: During startup, the bot builds a graph by fetching reserves and decimals for each token pair. Previously, this was done sequentially within a `for...of` loop, meaning the bot waited for each network request to complete before starting the next. Parallelizing these requests allows multiple requests to be processed concurrently by the RPC provider, significantly reducing the total startup time.
+**Why**: During startup, the bot builds a graph by fetching reserves and decimals for each token pair. Previously, this was done sequentially within a `for...of` loop, meaning the bot waited for each network request to complete before starting the next. Parallelizing these requests allows multiple requests to be processed concurrently by the RPC provider, significantly reducing the total startup time. Robust error handling was added to prevent a single network failure from halting the entire graph construction process.
 
 **Impact**: Dramatic reduction in graph construction time, directly proportional to the number of token pairs.
 

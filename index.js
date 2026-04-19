@@ -90,12 +90,20 @@ async function main() {
   // Create graph of token pairs and prices
   const graph = {};
   const pricePromises = pairs.map(([tokenA, tokenB]) =>
-    getTokenPrices(tokenA, tokenB, uniswapFactory, config, provider).then(
-      (prices) => ({ tokenA, tokenB, prices }),
-    ),
+    getTokenPrices(tokenA, tokenB, uniswapFactory, config, provider)
+      .then((prices) => ({ tokenA, tokenB, prices }))
+      .catch((err) => {
+        console.error(
+          `Error fetching prices for ${tokenA}/${tokenB}:`,
+          err.message,
+        );
+        return null;
+      }),
   );
 
-  const priceResults = await Promise.all(pricePromises);
+  const priceResults = (await Promise.all(pricePromises)).filter(
+    (res) => res !== null,
+  );
 
   for (const { tokenA, tokenB, prices } of priceResults) {
     const [tokenAPrice, tokenBPrice] = prices;
