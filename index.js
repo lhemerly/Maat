@@ -221,7 +221,7 @@ const findCycles = (graph) => {
       Object.keys(graph[node]).forEach((neighbor) => {
         if (!visited.has(neighbor)) {
           dfs(neighbor);
-        } else if (stack.includes(neighbor)) {
+        } else if (inStack.has(neighbor)) { // O(1) cycle detection check leveraging the inStack Set
           const cycle = [...stack.slice(stack.indexOf(neighbor)), neighbor].join(
             " -> "
           );
@@ -319,6 +319,7 @@ function calculateArbitrageProfit(rates) {
 if (require.main === module) {
   main().catch((err) => {
     console.error(err);
+    // eslint-disable-next-line no-undef
     process.exit(1);
   });
 }
