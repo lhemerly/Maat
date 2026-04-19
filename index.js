@@ -44,31 +44,63 @@ function toNumericProfit(profit) {
 const decimalCache = {};
 
 async function main() {
+  // Trigger file reads concurrently, catching errors to avoid unhandled rejections
+  const pairsPromise = fs.promises.readFile("pairs.json").catch((e) => e);
+  const factoryPromise = fs.promises
+    .readFile("ABIs/dexFactory.json")
+    .catch((e) => e);
+  const routerPromise = fs.promises
+    .readFile("ABIs/dexRouter.json")
+    .catch((e) => e);
+  const configPromise = fs.promises.readFile("config.json").catch((e) => e);
+
   // Load pairs from JSON file
   let pairs = [];
-  try {
-    pairs = JSON.parse(fs.readFileSync("pairs.json"));
-  } catch (e) {
-    console.error("Error loading pairs.json:", e.message);
+  const pairsResult = await pairsPromise;
+  if (pairsResult instanceof Error) {
+    console.error("Error loading pairs.json:", pairsResult.message);
+  } else {
+    try {
+      pairs = JSON.parse(pairsResult);
+    } catch (e) {
+      console.error("Error parsing pairs.json:", e.message);
+    }
   }
 
   // Load ABI from JSON file
   let dexFactoryABI = [];
   let dexRouterABI = [];
-  try {
-    dexFactoryABI = JSON.parse(fs.readFileSync("ABIs/dexFactory.json"));
-    dexRouterABI = JSON.parse(fs.readFileSync("ABIs/dexRouter.json"));
-  } catch (e) {
-    console.error("Error loading ABIs:", e.message);
+  const factoryResult = await factoryPromise;
+  const routerResult = await routerPromise;
+
+  if (factoryResult instanceof Error || routerResult instanceof Error) {
+    const errorMsg =
+      factoryResult instanceof Error
+        ? factoryResult.message
+        : routerResult.message;
+    console.error("Error loading ABIs:", errorMsg);
     return;
+  } else {
+    try {
+      dexFactoryABI = JSON.parse(factoryResult);
+      dexRouterABI = JSON.parse(routerResult);
+    } catch (e) {
+      console.error("Error parsing ABIs:", e.message);
+      return;
+    }
   }
 
   // Load provider data from JSON file
   let config = {};
-  try {
-    config = JSON.parse(fs.readFileSync("config.json"));
-  } catch (e) {
-    console.error("Error loading config.json:", e.message);
+  const configResult = await configPromise;
+  if (configResult instanceof Error) {
+    console.error("Error loading config.json:", configResult.message);
+  } else {
+    try {
+      config = JSON.parse(configResult);
+    } catch (e) {
+      console.error("Error parsing config.json:", e.message);
+    }
   }
 
   if (!config.rpcUrl || !config.privateKey) {
@@ -221,9 +253,10 @@ const findCycles = (graph) => {
         if (!visited.has(neighbor)) {
           dfs(neighbor);
         } else if (stack.includes(neighbor)) {
-          const cycle = [...stack.slice(stack.indexOf(neighbor)), neighbor].join(
-            " -> "
-          );
+          const cycle = [
+            ...stack.slice(stack.indexOf(neighbor)),
+            neighbor,
+          ].join(" -> ");
           cycles.add(cycle);
         }
       });
