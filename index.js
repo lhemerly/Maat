@@ -74,8 +74,13 @@ async function main() {
     return;
   }
 
-  if (typeof config.privateKey !== "string" || !/^(0x)?[0-9a-fA-F]{64}$/.test(config.privateKey)) {
-    console.error("Invalid configuration. privateKey must be a valid 64-character hex string, with or without a 0x prefix.");
+  if (
+    typeof config.privateKey !== "string" ||
+    !/^(0x)?[0-9a-fA-F]{64}$/.test(config.privateKey)
+  ) {
+    console.error(
+      "Invalid configuration. privateKey must be a valid 64-character hex string, with or without a 0x prefix."
+    );
     return;
   }
 
@@ -226,28 +231,35 @@ const findCycles = (graph) => {
     stack.push(node);
     inStack.add(node);
 
-    if (graph[node]) {
-      Object.keys(graph[node]).forEach((neighbor) => {
+    const neighbors = graph[node];
+    if (neighbors) {
+      // Bolt optimization: use for...in instead of Object.keys().forEach
+      // to prevent unnecessary array allocations on every node traversal.
+      for (const neighbor in neighbors) {
         if (!visited.has(neighbor)) {
           dfs(neighbor);
-        } else if (stack.includes(neighbor)) {
-          const cycle = [...stack.slice(stack.indexOf(neighbor)), neighbor].join(
-            " -> "
-          );
+        // Bolt optimization: replace O(N) stack.includes() with O(1) inStack.has()
+        // Reduces search time significantly on deep or dense graphs.
+        } else if (inStack.has(neighbor)) {
+          const cycle = [
+            ...stack.slice(stack.indexOf(neighbor)),
+            neighbor,
+          ].join(" -> ");
           cycles.add(cycle);
         }
-      });
+      }
     }
 
     inStack.delete(node);
     stack.pop();
   };
 
-  Object.keys(graph).forEach((node) => {
+  // Bolt optimization: use for...in loop here as well to save allocation
+  for (const node in graph) {
     if (!visited.has(node)) {
       dfs(node);
     }
-  });
+  }
 
   console.log(chalk.blue("All cycles found:"));
   cycles.forEach((cycle) => console.log(chalk.green(cycle)));
