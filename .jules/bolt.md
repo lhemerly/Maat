@@ -18,3 +18,7 @@ A simulation benchmark of 100 iterations of decimal fetching showed:
 - Baseline (no cache): ~1053.75 ms
 - Optimized (with cache): ~12.27 ms
 Improvement: ~98.8% reduction in latency for this operation.
+
+## 2024-05-18 - Unused O(1) Data Structures in Hot Paths
+**Learning:** In `findCycles`, an O(1) lookup structure (`inStack`) was allocated and maintained during traversal, but an O(N) array `.includes()` check (`stack.includes(neighbor)`) was used instead in the critical hot path condition. This is an anti-pattern where memory overhead is incurred for optimization but the optimization itself is ignored.
+**Action:** Always verify that optimized data structures (Sets, Maps) meant for performance are actually being called in the condition checks (`.has()` or `.get()`) rather than older, slower methods. Also, avoid `Object.keys(obj).forEach` in tight loops when `for...in` can prevent array allocation overhead.
