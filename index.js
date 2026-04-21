@@ -230,7 +230,7 @@ const findCycles = (graph) => {
       Object.keys(graph[node]).forEach((neighbor) => {
         if (!visited.has(neighbor)) {
           dfs(neighbor);
-        } else if (stack.includes(neighbor)) {
+        } else if (inStack.has(neighbor)) {
           const cycle = [...stack.slice(stack.indexOf(neighbor)), neighbor].join(
             " -> "
           );

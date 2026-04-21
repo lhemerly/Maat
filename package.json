@@ -29,6 +29,8 @@
     "prettier": "^2.8.7"
   },
   "dependencies": {
-    "chalk": "^4.1.2"
+    "bignumber.js": "^11.0.0",
+    "chalk": "^4.1.2",
+    "ethers": "^5.8.0"
   }
 }
