@@ -22,7 +22,8 @@ function isStructuredCycle(cycle) {
         Array.isArray(edge) &&
         edge.length >= 3 &&
         typeof edge[0] === "string" &&
-        typeof edge[1] === "string"
+        typeof edge[1] === "string" &&
+        BigNumber.isBigNumber(edge[2])
     )
   );
 }
@@ -71,7 +72,7 @@ async function main() {
     : `0x${config.privateKey}`;
 
   // Set up provider and signer
-  const provider = new ethers.providers.JsonRpcProvider(config.rpcUrl);
+  const provider = new ethers.JsonRpcProvider(config.rpcUrl);
   const wallet = new ethers.Wallet(normalizedPrivateKey, provider);
 
   // Set up contract instances
@@ -115,7 +116,7 @@ async function main() {
       const u = nodes[i];
       const v = nodes[i + 1];
       if (graph[u] && graph[u][v]) {
-        structuredCycle.push([u, v, graph[u][v].toNumber()]);
+        structuredCycle.push([u, v, graph[u][v]]);
       } else {
         valid = false;
         break;
@@ -159,12 +160,12 @@ async function getTokenPrices(
 
   console.log(
     `Token A (${chalk.yellow(tokenA)}) reserves: ${chalk.green(
-      ethers.utils.formatEther(tokenAReserves)
+      ethers.formatEther(tokenAReserves)
     )}`
   );
   console.log(
     `Token B (${chalk.yellow(tokenB)}) reserves: ${chalk.green(
-      ethers.utils.formatEther(tokenBReserves)
+      ethers.formatEther(tokenBReserves)
     )}`
   );
 
@@ -202,12 +203,12 @@ async function getTokenPrices(
 
   console.log(
     `Token A (${chalk.yellow(tokenA)}) price: ${chalk.green(
-      ethers.utils.formatUnits(tokenAPrice, tokenADecimals)
+      ethers.formatUnits(tokenAPrice, tokenADecimals)
     )}`
   );
   console.log(
     `Token B (${chalk.yellow(tokenB)}) price: ${chalk.green(
-      ethers.utils.formatUnits(tokenBPrice, tokenBDecimals)
+      ethers.formatUnits(tokenBPrice, tokenBDecimals)
     )}`
   );
 
@@ -279,16 +280,16 @@ function findCyclesRecursive(graph, currentToken, visited, cycle, cycles) {
 }
 
 function calculateArbitrageProfit(rates) {
-  let cycleRate = 1;
+  let cycleRate = new BigNumber(1);
 
   for (let i = 0; i < rates.length; i++) {
     const rate = rates[i][2];
-    cycleRate *= rate;
+    cycleRate = cycleRate.multipliedBy(rate);
   }
 
-  const potentialProfit = cycleRate - 1;
+  const potentialProfit = cycleRate.minus(1);
 
-  if (potentialProfit > 0) {
+  if (potentialProfit.isGreaterThan(0)) {
     console.log(chalk.yellow(`Arbitrage cycle found:`));
     for (let i = 0; i < rates.length; i++) {
       const [buyCurrency, sellCurrency, rate] = rates[i];
@@ -296,9 +297,9 @@ function calculateArbitrageProfit(rates) {
         chalk.yellow(`Swap ${buyCurrency} for ${sellCurrency} at rate ${chalk.green(rate.toFixed(4))}`)
       );
     }
-    const formattedProfit = chalk.green((potentialProfit * 100).toFixed(2));
+    const formattedProfit = chalk.green((potentialProfit.multipliedBy(100)).toFixed(2));
     console.log(chalk.green(`Profit: ${formattedProfit}%`));
-    return potentialProfit;
+    return potentialProfit.toNumber();
   }
 
   return 0;
