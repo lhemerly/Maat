@@ -27,19 +27,6 @@ function isStructuredCycle(cycle) {
   );
 }
 
-// calculateArbitrageProfit returns a number (profit sum) or a chalk-formatted
-// string when no opportunity is found; normalize to a numeric value for comparison.
-function toNumericProfit(profit) {
-  if (typeof profit === "number") {
-    return profit;
-  }
-  if (typeof profit === "string") {
-    const parsed = Number(profit);
-    return Number.isFinite(parsed) ? parsed : NaN;
-  }
-  return NaN;
-}
-
 // Cache for token decimals
 const decimalCache = {};
 
@@ -120,18 +107,31 @@ async function main() {
 
   // Find cycles in the graph and calculate profit for each cycle
   const foundCycles = findCycles(graph);
-  for (let cycle of foundCycles) {
-    if (!isStructuredCycle(cycle)) {
+  for (let cycleString of foundCycles) {
+    const nodes = cycleString.split(" -> ");
+    const structuredCycle = [];
+    let valid = true;
+    for (let i = 0; i < nodes.length - 1; i++) {
+      const u = nodes[i];
+      const v = nodes[i + 1];
+      if (graph[u] && graph[u][v]) {
+        structuredCycle.push([u, v, graph[u][v].toNumber()]);
+      } else {
+        valid = false;
+        break;
+      }
+    }
+
+    if (!valid || !isStructuredCycle(structuredCycle)) {
       console.warn(
         "Skipping profit calculation for unstructured cycle:",
-        cycle
+        cycleString
       );
       continue;
     }
-    const profit = calculateArbitrageProfit(cycle);
-    const numericProfit = toNumericProfit(profit);
-    if (Number.isFinite(numericProfit) && numericProfit > 0) {
-      console.log("Arbitrage opportunity found:", cycle, "Profit:", profit);
+    const profit = calculateArbitrageProfit(structuredCycle);
+    if (Number.isFinite(profit) && profit > 0) {
+      console.log("Arbitrage opportunity found:", cycleString, "Profit:", profit);
     }
   }
 }
@@ -279,50 +279,29 @@ function findCyclesRecursive(graph, currentToken, visited, cycle, cycles) {
 }
 
 function calculateArbitrageProfit(rates) {
-  let profit = 0;
+  let cycleRate = 1;
 
-  // Pre-compute a Map of rates for O(1) lookup
-  const ratesMap = new Map();
   for (let i = 0; i < rates.length; i++) {
-    const [buyCurrency, sellCurrency, rate] = rates[i];
-    ratesMap.set(`${buyCurrency}:${sellCurrency}`, rate);
+    const rate = rates[i][2];
+    cycleRate *= rate;
   }
 
-  // Loop through each currency pair to check for arbitrage opportunities
-  for (let i = 0; i < rates.length; i++) {
-    const [buyCurrency, sellCurrency, buyRate] = rates[i];
+  const potentialProfit = cycleRate - 1;
 
-    // Find the corresponding sell rate for the buy currency
-    const sellRate = ratesMap.get(`${sellCurrency}:${buyCurrency}`);
-    if (sellRate == null) {
-      throw new Error(
-        `Missing reverse rate for pair ${sellCurrency}:${buyCurrency}`
+  if (potentialProfit > 0) {
+    console.log(chalk.yellow(`Arbitrage cycle found:`));
+    for (let i = 0; i < rates.length; i++) {
+      const [buyCurrency, sellCurrency, rate] = rates[i];
+      console.log(
+        chalk.yellow(`Swap ${buyCurrency} for ${sellCurrency} at rate ${chalk.green(rate.toFixed(4))}`)
       );
     }
-
-    // Calculate the potential profit for this cycle
-    const potentialProfit = sellRate / buyRate - 1;
-
-    // If there is a profit opportunity, log the details and update the total profit
-    if (potentialProfit > 0) {
-      const formattedBuyRate = chalk.green(buyRate.toFixed(4));
-      const formattedSellRate = chalk.green(sellRate.toFixed(4));
-      const formattedProfit = chalk.green((potentialProfit * 100).toFixed(2));
-      console.log(
-        chalk.yellow(`Buy ${buyCurrency} at rate ${formattedBuyRate}`)
-      );
-      console.log(
-        chalk.yellow(`Sell ${sellCurrency} at rate ${formattedSellRate}`)
-      );
-      console.log(chalk.green(`Profit: ${formattedProfit}%`));
-      profit += potentialProfit;
-    }
+    const formattedProfit = chalk.green((potentialProfit * 100).toFixed(2));
+    console.log(chalk.green(`Profit: ${formattedProfit}%`));
+    return potentialProfit;
   }
 
-  // Return the total profit rounded to 2 decimal places
-  return profit > 0
-    ? chalk.green(`Total profit: ${(profit * 100).toFixed(2)}%`)
-    : chalk.red("No arbitrage opportunities found");
+  return 0;
 }
 
 if (require.main === module) {
