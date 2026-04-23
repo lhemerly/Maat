@@ -239,14 +239,16 @@ const findCycles = (graph) => {
 
     if (graph[node]) {
       for (const neighbor in graph[node]) {
-        if (!visited.has(neighbor)) {
-          dfs(neighbor);
-        } else if (inStack.has(neighbor)) {
-          const cycle = [
-            ...stack.slice(stack.indexOf(neighbor)),
-            neighbor,
-          ].join(" -> ");
-          cycles.add(cycle);
+        if (Object.hasOwn(graph[node], neighbor)) {
+          if (!visited.has(neighbor)) {
+            dfs(neighbor);
+          } else if (inStack.has(neighbor)) {
+            const cycle = [
+              ...stack.slice(stack.indexOf(neighbor)),
+              neighbor,
+            ].join(" -> ");
+            cycles.add(cycle);
+          }
         }
       }
     }
@@ -256,8 +258,10 @@ const findCycles = (graph) => {
   };
 
   for (const node in graph) {
-    if (!visited.has(node)) {
-      dfs(node);
+    if (Object.hasOwn(graph, node)) {
+      if (!visited.has(node)) {
+        dfs(node);
+      }
     }
   }
 
