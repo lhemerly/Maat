@@ -62,8 +62,13 @@ async function main() {
     return;
   }
 
-  if (typeof config.privateKey !== "string" || !/^(0x)?[0-9a-fA-F]{64}$/.test(config.privateKey)) {
-    console.error("Invalid configuration. privateKey must be a valid 64-character hex string, with or without a 0x prefix.");
+  if (
+    typeof config.privateKey !== "string" ||
+    !/^(0x)?[0-9a-fA-F]{64}$/.test(config.privateKey)
+  ) {
+    console.error(
+      "Invalid configuration. privateKey must be a valid 64-character hex string, with or without a 0x prefix."
+    );
     return;
   }
 
@@ -132,7 +137,12 @@ async function main() {
     }
     const profit = calculateArbitrageProfit(structuredCycle);
     if (Number.isFinite(profit) && profit > 0) {
-      console.log("Arbitrage opportunity found:", cycleString, "Profit:", profit);
+      console.log(
+        "Arbitrage opportunity found:",
+        cycleString,
+        "Profit:",
+        profit
+      );
     }
   }
 }
@@ -228,27 +238,28 @@ const findCycles = (graph) => {
     inStack.add(node);
 
     if (graph[node]) {
-      Object.keys(graph[node]).forEach((neighbor) => {
+      for (const neighbor in graph[node]) {
         if (!visited.has(neighbor)) {
           dfs(neighbor);
-        } else if (stack.includes(neighbor)) {
-          const cycle = [...stack.slice(stack.indexOf(neighbor)), neighbor].join(
-            " -> "
-          );
+        } else if (inStack.has(neighbor)) {
+          const cycle = [
+            ...stack.slice(stack.indexOf(neighbor)),
+            neighbor,
+          ].join(" -> ");
           cycles.add(cycle);
         }
-      });
+      }
     }
 
     inStack.delete(node);
     stack.pop();
   };
 
-  Object.keys(graph).forEach((node) => {
+  for (const node in graph) {
     if (!visited.has(node)) {
       dfs(node);
     }
-  });
+  }
 
   console.log(chalk.blue("All cycles found:"));
   cycles.forEach((cycle) => console.log(chalk.green(cycle)));
@@ -294,10 +305,16 @@ function calculateArbitrageProfit(rates) {
     for (let i = 0; i < rates.length; i++) {
       const [buyCurrency, sellCurrency, rate] = rates[i];
       console.log(
-        chalk.yellow(`Swap ${buyCurrency} for ${sellCurrency} at rate ${chalk.green(rate.toFixed(4))}`)
+        chalk.yellow(
+          `Swap ${buyCurrency} for ${sellCurrency} at rate ${chalk.green(
+            rate.toFixed(4)
+          )}`
+        )
       );
     }
-    const formattedProfit = chalk.green((potentialProfit.multipliedBy(100)).toFixed(2));
+    const formattedProfit = chalk.green(
+      potentialProfit.multipliedBy(100).toFixed(2)
+    );
     console.log(chalk.green(`Profit: ${formattedProfit}%`));
     return potentialProfit.toNumber();
   }
