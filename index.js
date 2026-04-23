@@ -256,29 +256,6 @@ const findCycles = (graph) => {
   return cycles;
 };
 
-function findCyclesRecursive(graph, currentToken, visited, cycle, cycles) {
-  visited[currentToken] = true;
-  cycle.push(currentToken);
-
-  const neighbors = graph[currentToken] ? Object.keys(graph[currentToken]) : [];
-
-  for (const neighbor of neighbors) {
-    if (!visited[neighbor]) {
-      findCyclesRecursive(graph, neighbor, visited, cycle, cycles);
-    } else {
-      const cycleIndex = cycle.indexOf(neighbor);
-      if (cycleIndex > -1) {
-        const formattedCycle = [...cycle.slice(cycleIndex), neighbor];
-        console.log(chalk.green(`Found cycle: ${formattedCycle.join(" -> ")}`));
-        cycles.push(formattedCycle);
-      }
-    }
-  }
-
-  cycle.pop();
-  visited[currentToken] = false;
-}
-
 function calculateArbitrageProfit(rates) {
   let cycleRate = new BigNumber(1);
 
@@ -314,6 +291,5 @@ if (require.main === module) {
 
 module.exports = {
   findCycles,
-  findCyclesRecursive,
   calculateArbitrageProfit,
 };
