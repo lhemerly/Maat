@@ -45,7 +45,7 @@ test("findCyclesRecursive", async (t) => {
       B: { A: 1 },
     };
     const cycles = [];
-    findCyclesRecursive(graph, "A", {}, [], cycles);
+    findCyclesRecursive(graph, "A", new Set(), [], cycles);
 
     // The implementation adds the neighbor to the end of the cycle array
     // So A -> B -> A
@@ -60,7 +60,7 @@ test("findCyclesRecursive", async (t) => {
       C: { A: 1 },
     };
     const cycles = [];
-    findCyclesRecursive(graph, "A", {}, [], cycles);
+    findCyclesRecursive(graph, "A", new Set(), [], cycles);
 
     assert.strictEqual(cycles.length, 1);
     assert.deepStrictEqual(cycles[0], ["A", "B", "C", "A"]);
@@ -73,7 +73,7 @@ test("findCyclesRecursive", async (t) => {
       C: {},
     };
     const cycles = [];
-    findCyclesRecursive(graph, "A", {}, [], cycles);
+    findCyclesRecursive(graph, "A", new Set(), [], cycles);
 
     assert.strictEqual(cycles.length, 0);
   });
@@ -85,7 +85,7 @@ test("findCyclesRecursive", async (t) => {
       C: { A: 1 },
     };
     const cycles = [];
-    findCyclesRecursive(graph, "A", {}, [], cycles);
+    findCyclesRecursive(graph, "A", new Set(), [], cycles);
 
     assert.strictEqual(cycles.length, 2);
     // Order depends on Object.keys(graph["A"])
@@ -109,7 +109,7 @@ test("findCyclesRecursive", async (t) => {
       D: { B: 1 },
     };
     const cycles = [];
-    findCyclesRecursive(graph, "A", {}, [], cycles);
+    findCyclesRecursive(graph, "A", new Set(), [], cycles);
 
     assert.strictEqual(cycles.length, 2);
     const expected = [

@@ -29,7 +29,7 @@ function isStructuredCycle(cycle) {
 }
 
 // Cache for token decimals
-const decimalCache = {};
+const decimalCache = Object.create(null);
 
 async function main() {
   // Load pairs from JSON file
@@ -88,7 +88,7 @@ async function main() {
   );
 
   // Create graph of token pairs and prices
-  const graph = {};
+  const graph = Object.create(null);
   for (let [tokenA, tokenB] of pairs) {
     const [tokenAPrice, tokenBPrice] = await getTokenPrices(
       tokenA,
@@ -101,12 +101,12 @@ async function main() {
     const tokenBPriceBN = new BigNumber(tokenBPrice);
 
     if (!graph[tokenA]) {
-      graph[tokenA] = {};
+      graph[tokenA] = Object.create(null);
     }
     graph[tokenA][tokenB] = tokenBPriceBN.div(tokenAPriceBN);
 
     if (!graph[tokenB]) {
-      graph[tokenB] = {};
+      graph[tokenB] = Object.create(null);
     }
     graph[tokenB][tokenA] = tokenAPriceBN.div(tokenBPriceBN);
   }
@@ -272,13 +272,13 @@ const findCycles = (graph) => {
 };
 
 function findCyclesRecursive(graph, currentToken, visited, cycle, cycles) {
-  visited[currentToken] = true;
+  visited.add(currentToken);
   cycle.push(currentToken);
 
   const neighbors = graph[currentToken] ? Object.keys(graph[currentToken]) : [];
 
   for (const neighbor of neighbors) {
-    if (!visited[neighbor]) {
+    if (!visited.has(neighbor)) {
       findCyclesRecursive(graph, neighbor, visited, cycle, cycles);
     } else {
       const cycleIndex = cycle.indexOf(neighbor);
@@ -291,7 +291,7 @@ function findCyclesRecursive(graph, currentToken, visited, cycle, cycles) {
   }
 
   cycle.pop();
-  visited[currentToken] = false;
+  visited.delete(currentToken);
 }
 
 function calculateArbitrageProfit(rates) {
